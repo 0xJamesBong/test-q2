@@ -2,7 +2,7 @@
 // An example of a consumer contract that directly pays for each request.
 
 pragma solidity ^0.8.0;
-
+import {console} from "../lib/forge-std/src/console.sol";
 import {Ownable} from "../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import {VRFV2WrapperConsumerBase} from "../lib/chainlink/contracts/src/v0.8/vrf/VRFV2WrapperConsumerBase.sol";
 import {LinkTokenInterface} from "../lib/chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
@@ -88,7 +88,7 @@ contract ChainlinkLuckyDraw is VRFV2WrapperConsumerBase, Ownable {
         uint32 _callbackGasLimit,
         uint16 _requestConfirmations,
         uint32 _numWords
-    ) external onlyOwner returns (uint256 requestId) {
+    ) public onlyOwner returns (uint256 requestId) {
         requestId = requestRandomness(
             _callbackGasLimit,
             _requestConfirmations,
@@ -128,7 +128,7 @@ contract ChainlinkLuckyDraw is VRFV2WrapperConsumerBase, Ownable {
     function getRequestStatus(
         uint256 _requestId
     )
-        external
+        public
         view
         returns (uint256 paid, bool fulfilled, uint256[] memory randomWords)
     {
@@ -137,13 +137,50 @@ contract ChainlinkLuckyDraw is VRFV2WrapperConsumerBase, Ownable {
         return (request.paid, request.fulfilled, request.randomWords);
     }
 
+    function setNumOfWinners(uint256 _numOfWinners) external onlyOwner {
+        numOfWinners = _numOfWinners;
+    }
+
+    function setCandidateAddresses(
+        address[] memory _candidates
+    ) external onlyOwner {
+        candidates = _candidates;
+    }
+
+    uint256 public randomResult;
+    uint256 public numOfWinners;
+    address[] public candidates;
+    address[] public winners;
+
+    function getWinners() public onlyOwner returns (address[] memory winners) {
+        (
+            uint256 paid,
+            bool fulfilled,
+            uint256[] memory randomWords
+        ) = getRequestStatus(lastRequestId);
+        uint256 randomness = randomWords[0];
+        console.log(randomness);
+        // Select winners
+        winners = new address[](numOfWinners);
+        // uint256 randomness = randomResult;
+        for (uint i = 0; i < numOfWinners; i++) {
+            winners[i] = candidates[randomness % candidates.length];
+            randomness = uint(keccak256(abi.encode(randomness)));
+        }
+
+        emit WinnersSelected(winners);
+        // return winners;
+    }
+
+    event WinnersSelected(address[] winners);
+
     /**
      * Allow withdraw of Link tokens from the contract
      */
-    function withdrawLink() public onlyOwner {
-        LinkTokenInterface link = LinkTokenInterface(linkAddress);
+
+    function withdrawLink() external onlyOwner {
         require(
-            link.transfer(msg.sender, link.balanceOf(address(this))),
+            LINK.transfer(msg.sender, LINK.balanceOf(address(this))),
             "Unable to transfer"
         );
     }

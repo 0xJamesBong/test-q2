@@ -79,6 +79,25 @@ contract ChinalinkLuckyDrawTest is Test {
             console.log("random word", i, randomWords[i]);
         }
     }
+
+    function getCandidates() public returns (address[] memory) {
+        address[] memory candidates = new address[](100);
+        for (uint256 i = 0; i < 100; i++) {
+            candidates[i] = address(uint160(i));
+        }
+        return candidates;
+    }
+
+    function test_get_winners() public {
+        address[] memory candidates = getCandidates();
+        chainlinkLuckyDraw.setCandidateAddresses(candidates);
+        chainlinkLuckyDraw.setNumOfWinners(3);
+        address[] memory winners = chainlinkLuckyDraw.getWinners();
+
+        for (uint256 i = 0; i < winners.length; i++) {
+            console.log("winners", i, winners[i]);
+        }
+    }
 }
 
 // https://docs.chain.link/vrf/v2/direct-funding/examples/test-locally#testing-logic
