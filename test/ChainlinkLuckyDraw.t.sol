@@ -11,6 +11,11 @@ import {VRFV2Wrapper} from "../lib/chainlink/contracts/src/v0.8/vrf/VRFV2Wrapper
 import {ChainlinkLuckyDraw} from "../src/ChainlinkLuckyDraw.sol";
 
 contract ChinalinkLuckyDrawTest is Test {
+    address alice = address(0xAA); // alice is designated the owner of the pizza contract
+    address bob = address(0xBB);
+    address carol = address(0xCC);
+    address dominic = address(0xDD);
+
     VRFCoordinatorV2Mock vrfCoordinatorV2Mock;
     MockV3Aggregator mockV3Aggregator;
     MockLinkToken mockLinkToken;
@@ -57,17 +62,27 @@ contract ChinalinkLuckyDrawTest is Test {
             address(chainlinkLuckyDraw),
             10000000000000000000
         );
-        //  fill in _callbackGasLimit with 300000, _requestConfirmations with 3 and _numWords with 3.
-        uint256 requestId = chainlinkLuckyDraw.requestRandomWords(300000, 3, 3);
+        // //  fill in _callbackGasLimit with 300000, _requestConfirmations with 3 and _numWords with 3.
+        // uint256 requestId = chainlinkLuckyDraw.requestRandomWords(300000, 3, 3);
 
-        vrfCoordinatorV2Mock.fulfillRandomWords(
-            requestId,
-            address(vRFV2Wrapper)
-        );
+        // vrfCoordinatorV2Mock.fulfillRandomWords(
+        //     requestId,
+        //     address(vRFV2Wrapper)
+        // );
+    }
+
+    function test_owner() public {
+        assertEq(chainlinkLuckyDraw.owner(), address(this));
     }
 
     function test_request_randomWords() public {
+        uint256 requestId = chainlinkLuckyDraw.requestRandomWords(300000, 3, 3);
         uint256 lastRequestId = chainlinkLuckyDraw.lastRequestId();
+        vrfCoordinatorV2Mock.fulfillRandomWords(
+            lastRequestId,
+            address(vRFV2Wrapper)
+        );
+        assertEq(requestId, lastRequestId);
         (
             uint256 paid,
             bool fulfilled,
@@ -88,16 +103,106 @@ contract ChinalinkLuckyDrawTest is Test {
         return candidates;
     }
 
+    function test_set_candidates() public {
+        address[] memory candidates = getCandidates();
+        chainlinkLuckyDraw.setCandidateAddresses(candidates);
+        // anybody else calling the function result in a revert;
+        vm.prank(alice);
+        vm.expectRevert("Ownable: caller is not the owner");
+        chainlinkLuckyDraw.setCandidateAddresses(candidates);
+    }
+
     function test_get_winners() public {
         address[] memory candidates = getCandidates();
         chainlinkLuckyDraw.setCandidateAddresses(candidates);
-        chainlinkLuckyDraw.setNumOfWinners(3);
+        chainlinkLuckyDraw.setNumOfWinners(uint256(3));
+        chainlinkLuckyDraw.requestRandomWords(
+            chainlinkLuckyDraw.callbackGasLimit(),
+            chainlinkLuckyDraw.requestConfirmations(),
+            chainlinkLuckyDraw.numWords()
+        );
+        // I originally wanted to embed the requestRandomWords function directly into the getWinners() function
+        // However, because in a testing environment, you need to fulfill the random words by manually calling the function at vrfCoordinatorV2Mock
+        // So instead of that, you have to call requestRandomWords first, which would update the lastRequestId
+        // And then call the vrfCoordinatorV2Mock.fulfillRandomWords(), which would fulfill the request
+        // And then call the getWinners, so that you can get the winners
+        // For deploying on to a real blockchain, you can modify the requestRandomWords() function directly into getWinners()
+        uint256 requestId_1 = chainlinkLuckyDraw.lastRequestId();
+
+        vrfCoordinatorV2Mock.fulfillRandomWords(
+            chainlinkLuckyDraw.lastRequestId(),
+            address(vRFV2Wrapper)
+        );
+
         address[] memory winners = chainlinkLuckyDraw.getWinners();
 
         for (uint256 i = 0; i < winners.length; i++) {
             console.log("winners", i, winners[i]);
         }
+
+        address[] memory historicalWinners_1 = chainlinkLuckyDraw
+            .getHistoricalWinners(requestId_1);
+        for (uint256 i = 0; i < winners.length; i++) {
+            assertEq(winners[i], historicalWinners_1[i]);
+        }
+
+        // Let us request a new series of random Words
+
+        chainlinkLuckyDraw.requestRandomWords(
+            chainlinkLuckyDraw.callbackGasLimit(),
+            chainlinkLuckyDraw.requestConfirmations(),
+            chainlinkLuckyDraw.numWords()
+        );
+        vrfCoordinatorV2Mock.fulfillRandomWords(
+            chainlinkLuckyDraw.lastRequestId(),
+            address(vRFV2Wrapper)
+        );
+        address[] memory winners2 = chainlinkLuckyDraw.getWinners();
+
+        for (uint256 i = 0; i < winners2.length; i++) {
+            console.log("winners", i, winners2[i]);
+        }
     }
+
+    function test_can_withdraw_link() public {
+        uint256 originalBalance = mockLinkToken.balanceOf(
+            chainlinkLuckyDraw.owner()
+        );
+        uint256 contractBalanace = mockLinkToken.balanceOf(
+            address(chainlinkLuckyDraw)
+        );
+
+        // only the owner can withdraw link.
+        // An imposter like Alice will be humiliated.
+        vm.prank(alice);
+        vm.expectRevert("Ownable: caller is not the owner");
+        chainlinkLuckyDraw.withdrawLink();
+
+        chainlinkLuckyDraw.withdrawLink();
+        assertEq(mockLinkToken.balanceOf(address(chainlinkLuckyDraw)), 0);
+        assertEq(
+            mockLinkToken.balanceOf(chainlinkLuckyDraw.owner()),
+            originalBalance + contractBalanace
+        );
+    }
+
+    function test_address() public view {
+        for (uint256 i = 0; i <= 10; i++) {
+            console.log(i, address(uint160(i)));
+        }
+    }
+
+      [0x0000000000000000000000000000000000000001,
+      0x0000000000000000000000000000000000000002,
+      0x0000000000000000000000000000000000000003,
+      0x0000000000000000000000000000000000000004,
+      0x0000000000000000000000000000000000000005,
+      0x0000000000000000000000000000000000000006,
+      0x0000000000000000000000000000000000000007,
+      0x0000000000000000000000000000000000000008,
+      0x0000000000000000000000000000000000000009,
+      0x000000000000000000000000000000000000000A,
+      0x000000000000000000000000000000000000000B]
 }
 
 // https://docs.chain.link/vrf/v2/direct-funding/examples/test-locally#testing-logic

@@ -37,14 +37,14 @@ contract ChainlinkLuckyDraw is VRFV2WrapperConsumerBase, Ownable {
     // this limit based on the network that you select, the size of the request,
     // and the processing of the callback request in the fulfillRandomWords()
     // function.
-    uint32 callbackGasLimit = 100000;
+    uint32 public callbackGasLimit = 100000;
 
     // The default is 3, but you can set this higher.
-    uint16 requestConfirmations = 3;
+    uint16 public requestConfirmations = 3;
 
     // For this example, retrieve 2 random values in one request.
     // Cannot exceed VRFV2Wrapper.getConfig().maxNumWords.
-    uint32 numWords = 2;
+    uint32 public numWords = 2;
 
     // Address LINK - hardcoded for Sepolia
     // address linkAddress = 0x779877A7B0D9E8603169DdbD7836e478b4624789;
@@ -150,26 +150,35 @@ contract ChainlinkLuckyDraw is VRFV2WrapperConsumerBase, Ownable {
     uint256 public randomResult;
     uint256 public numOfWinners;
     address[] public candidates;
-    address[] public winners;
+    // address[] public winners;
 
-    function getWinners() public onlyOwner returns (address[] memory winners) {
+    mapping(uint256 => address[] winners) requestId_to_winners;
+
+    function getHistoricalWinners(
+        uint256 requestId
+    ) public view returns (address[] memory winners) {
+        return requestId_to_winners[requestId];
+    }
+
+    function getWinners() public returns (address[] memory winners) {
         (
             uint256 paid,
             bool fulfilled,
             uint256[] memory randomWords
         ) = getRequestStatus(lastRequestId);
-        uint256 randomness = randomWords[0];
-        console.log(randomness);
+
+        uint256 randomness = randomWords[1];
+
         // Select winners
         winners = new address[](numOfWinners);
-        // uint256 randomness = randomResult;
+
         for (uint i = 0; i < numOfWinners; i++) {
             winners[i] = candidates[randomness % candidates.length];
             randomness = uint(keccak256(abi.encode(randomness)));
         }
-
+        requestId_to_winners[lastRequestId] = winners;
         emit WinnersSelected(winners);
-        // return winners;
+        return winners;
     }
 
     event WinnersSelected(address[] winners);
